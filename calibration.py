@@ -17,6 +17,8 @@ LINE_KERNEL = 15             # Wider than outlines, narrower than solid boxes.
 MIN_REGION_AREA = 300  # About 0.2 cm²; allows small keys.
 GAP_KERNEL = 11            # Closes small breaks in hand-drawn outlines.
 SNAP_PX = 20                 # About 0.5 cm.
+HULL_MIN_AREA = 5000         # Smaller ink blobs (stray marks) don't get sealed.
+EDGE_PX = BORDER_PX + 2      # Ink this close to the paper edge is the desk, not a drawing.
 
 
 def order_corners(pts):
@@ -95,6 +97,11 @@ def order_regions(cents, kinds, flat_map):
     return sorted(kinds, key=lambda t: cents[t])
 
 
+def touches_edge(x, y, w, h, fw, fh):
+    # True if a bounding box reaches into the strip along the paper edge.
+    return x <= EDGE_PX or y <= EDGE_PX or x + w >= fw - EDGE_PX or y + h >= fh - EDGE_PX
+
+
 def find_regions(flat, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
     fh, fw = flat.shape
     blurred = cv2.GaussianBlur(flat, (5, 5), 0)
@@ -142,6 +149,16 @@ def find_regions(flat, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
         ink, cv2.MORPH_CLOSE, np.ones((GAP_KERNEL, GAP_KERNEL), np.uint8)
     )
     closed = cv2.dilate(closed, np.ones((3, 3), np.uint8))
+    # Seal each drawing's outside edge with its convex hull. Thin printed
+    # borders can be too faint to pass the ink test (they look like ruled
+    # lines); without this, white keys leak into the paper and vanish.
+    n_c, labels_c, stats_c, _ = cv2.connectedComponentsWithStats(closed, connectivity=8)
+    for i in range(1, n_c):
+        x, y, w, h, area = stats_c[i]
+        if area < HULL_MIN_AREA or touches_edge(x, y, w, h, fw, fh):
+            continue
+        pts = cv2.findNonZero((labels_c == i).astype(np.uint8))
+        cv2.polylines(closed, [cv2.convexHull(pts)], True, 255, 3)
     white = np.where(closed == 0, 255, 0).astype(np.uint8)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(white, connectivity=4)
     outlined = []
@@ -152,6 +169,15 @@ def find_regions(flat, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
         if area < MIN_REGION_AREA:
             continue
         outlined.append(labels == i)
+
+    # On a light desk the "paper" can include the desk, so a laptop corner or
+    # shadow at the edge would become key 1. Real drawings sit inside a margin.
+    def inside(m):
+        ys, xs = np.nonzero(m)
+        return not touches_edge(xs.min(), ys.min(), xs.max() - xs.min() + 1,
+                                ys.max() - ys.min() + 1, fw, fh)
+    solids = [m for m in solids if inside(m)]
+    outlined = [m for m in outlined if inside(m)]
 
     # Paint outlined first, then solid on top, with temporary IDs.
     flat_map = np.zeros((fh, fw), np.uint16)
