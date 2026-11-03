@@ -1,17 +1,26 @@
 # Plans
 
-Execution order: 001 → 002 → 003. Each builds on the previous commit.
+Plans are listed in execution order where they depend on each other. Each one says which commit it was written against.
 
 | # | Plan | Status | Depends on |
 |---|---|---|---|
-| 001 | [Camera server hardening + test baseline](001-camera-server-hardening.md) | DONE: approved, commit 3e0f1a1 on branch `worktree-agent-aa393ef611252490d`, not merged | — |
-| 002 | [Paper region calibration (M-1)](002-paper-region-calibration.md) | DONE: approved, commit d5f576d on branch `worktree-agent-aaddf3d3f2df9cee2` (includes 001), not merged | 001 |
-| 003 | [Calibration robustness](003-calibration-robustness.md) | DRAFT | 002 |
-| 004 | [Hand-drawn outlines and portrait paper](004-hand-drawn-outlines-and-portrait.md) | DONE: approved, commit b9ff427 on branch `worktree-agent-a6f7368f91b5eff23`, not merged | 002 |
+| 001 | [Camera server hardening + test baseline](001-camera-server-hardening.md) | DONE: merged to main | — |
+| 002 | [Paper region calibration (M-1)](002-paper-region-calibration.md) | DONE: merged to main | 001 |
+| 003 | [Calibration robustness](003-calibration-robustness.md) | DRAFT, stale: it names `receive_frame` (the logic is now in `process_frame`), and its "first hand only" edge stabilisation conflicts with the open two-hands finding below. Rewrite against current code before running it. | 002 |
+| 004 | [Hand-drawn outlines and portrait paper](004-hand-drawn-outlines-and-portrait.md) | DONE: merged to main | 002 |
+| 005 | [Frame rate and 640×480 capture](005-frame-rate-and-resolution.md) | DONE: merged to main | 004 |
 | 006 | [Piano ordering, small keys, rotation](006-piano-ordering-small-keys-rotation.md) | DONE: merged to main (aa9324e) | 005 |
 | 007 | [Live calibration sliders](007-calibration-sliders.md) | DONE: merged to main (fb2dadb) | 006 |
 | 008 | [Strap import + M0 tools](008-strap-import-and-m0-tools.md) | DONE: merged to main (97f37e6); awaiting strap for real sessions | 007 |
-| 005 | [Frame rate and 640×480 capture](005-frame-rate-and-resolution.md) | DONE: approved, commit 251a10b on branch `worktree-agent-ac296e52fc4e88839` (includes 004), not merged | 004 |
+| 009 | [Test isolation, calibration reload, README structure](009-test-isolation-calibration-reload-readme.md) | TODO (planned at ce1af56, 2026-11-03) | — |
+| 010 | [Seal faint keyboard borders (printed piano on white desk)](010-seal-faint-keyboard-borders.md) | DONE: reviewed and approved, merged to main (810b120, 0df79c5) on 2026-11-03; 36 tests OK, 24/24 chromatic on all 3 user photos | — (independent of 009) |
+
+## Open findings, not planned yet (audit 2026-11-03, at ce1af56)
+
+- **The second hand is ignored.** `phone_server.py:254-259` maps only `hand_landmarks[0]`, and the `fingers` dict is keyed by finger name, so two hands would collide. Meanwhile `num_hands=2` (`:73`). This must land before plan 003 is rewritten.
+- **The Tap SDK is unpinned.** `requirements.txt:5` installs tap-python-sdk from git with no commit pinned, and `tapstrap/stream.py:60,84-86` uses its private internals (`on_raw_data` override, `_write_input_mode`, `input_mode_refresh`). The venv has commit `e92d13011ff95f2182604b130aeda633c225cd20`. Pin with `@<sha>`.
+- **The slider/trackbar logic is untested.** It sits inline in `__main__` (`phone_server.py:362-424`), and the sens↔ink_ratio formula is written twice (`:399`, `:404`).
+- **Direction:** note output (MIDI mapping + a mido synth behind a swappable trigger, so a strap tap can replace hover later); an end-to-end latency harness (METRICS "Still to measure").
 
 ## Decisions from the design-doc grilling (2026-10-29)
 
@@ -23,4 +32,14 @@ Execution order: 001 → 002 → 003. Each builds on the previous commit.
 - **Parked:** synth choice (default idea: built-in Windows GS synth via mido), instrument switching UX, strap M0 measurements, lift detection for note length (test, then decide; fixed length is the fallback), light-coloured desks.
 - **Reminder owed to the user:** when 002 lands, take 3 S-key snapshots (normal light, dim light, slight tilt) for fixtures.
 
-Considered and rejected: binding to 127.0.0.1 (transport may move to LAN HTTPS, which needs LAN reachability); the ngrok URL in git history (it's a hostname, not a credential).
+## Considered and rejected
+
+- Binding to 127.0.0.1: the transport may move to LAN HTTPS, which needs LAN reachability.
+- The ngrok URL in git history: it's a hostname, not a credential.
+- Unauthenticated `/frame` (2026-11-03): the worst case is fake frames into a local toy, and it follows from the LAN-reachability decision above.
+- Skipping paper detection per frame once calibrated (2026-11-03): processing is about 13 ms per frame, so the headroom is fine. Revisit only if `proc` becomes a bottleneck on AC power.
+- The slider float round-trip (2026-11-03): checked, and `0.5 + 0.4*70/100 == 0.78` exactly. Saved settings don't trigger a spurious rebuild.
+- A one-off OpenBLAS memory-allocation error during a test run (2026-11-03): it didn't happen again on two reruns.
+- Pixel tweaks to make faint printed borders count as ink (2026-11-03): ratio on a 3×3/unblurred image recovered at most 3 keys and broke `test_blank_piano_needs_higher_sensitivity`. Faint printed borders and ruled lines have the same darkness (~0.8) and the same colour (saturation ≈ 23–29, not blue), so no pixel threshold separates them. Plan 010's hull seal is the shape-based answer.
+- Light desks: separating paper from a white desk by colour or brightness (2026-11-03): measured on the user's frames, paper V 188–212 vs desk V 186–197, with the same low saturation and the same Lab b. There is no usable threshold.
+- Light desks: using the drawing's printed outline (Canny 4-gon, ×1.15–1.25 margin) as the "paper" when the paper merges with the desk (2026-11-03): it found the outline reliably, but flattening the long keyboard to Letter proportions added a false white key (25 instead of 24) on all 3 frames, which is worse than plan 010 alone (24/24). Revisit only if flattening keeps the quad's own aspect ratio, and only with a failing photo to justify it.
