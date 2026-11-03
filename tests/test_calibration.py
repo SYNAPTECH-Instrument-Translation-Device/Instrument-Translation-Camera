@@ -183,10 +183,25 @@ class CalibrationTests(unittest.TestCase):
             kinds = "".join(r["kind"][0].upper() for r in build_calibration([img])["regions"])
             self.assertEqual(kinds, "OSOO", name)
 
-    def test_blank_piano_needs_higher_sensitivity(self):
+    def test_printed_piano_on_white_desk(self):
+        # Real 640x360 Camo frames: a printed two-octave keyboard on a white
+        # desk. The thin top border was too faint to see, so white keys leaked
+        # into the paper and vanished; desk objects at the edge became keys.
+        for name in ("printed_piano_white_desk_1.jpg", "printed_piano_white_desk_2.jpg"):
+            img = cv2.imread(str(Path(__file__).parent / "fixtures" / name))
+            for settings in ((0.78, 9), (0.86, 9)):
+                kinds = "".join(
+                    r["kind"][0].upper()
+                    for r in build_calibration([img], *settings)["regions"]
+                )
+                self.assertEqual(kinds, "OSOSOOSOSOSO" * 2, f"{name} {settings}")
+
+    def test_blank_piano_small(self):
+        # Used to need higher sensitivity (11/12 keys at default); the hull
+        # seal now closes the faint outline, so the default works too.
         img = cv2.imread(str(Path(__file__).parent / "fixtures" / "blank_piano_small.jpg"))
         cal = build_calibration([img])
-        self.assertLess(len(cal["regions"]), 12)
+        self.assertEqual("".join(r["kind"][0].upper() for r in cal["regions"]), "OSOSOOSOSOSO")
         kinds = "".join(r["kind"][0].upper() for r in rebuild_calibration(cal, 0.8, 15)["regions"])
         self.assertEqual(kinds, "OSOSOOSOSOSO")
 

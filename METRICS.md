@@ -31,6 +31,8 @@ These are numbers worth keeping for write-ups and résumé bullets. Every entry 
 | 2026-10-29 | Re-tuning detection after calibration | Re-detects ~0.3 s after a slider stops moving, using the saved reference image; no new capture needed | By design |
 | 2026-10-29 | Soft shadow across the paper on a real Camo frame | Before: detected as a huge fake black key. After: ignored (dark ink must now be dark compared with the surrounding paper) | Measured on a real photo, now a regression test |
 | 2026-10-29 | Lookup cost from fingertip to key | One array read per fingertip (precomputed key map) | By design |
+| 2026-11-03 | Printed two-octave keyboard (14 white + 10 black keys) on a white desk, 640×360 Camo frames, at the user's slider settings | Before: 7–12 of 14 white keys (thin top border too faint, so keys leaked into the paper), plus a laptop corner and a desk shadow counted as keys. After: **24/24 keys in chromatic order** on all 3 frames | Measured on real photos, now regression tests |
+| 2026-11-03 | Small blank hand-drawn keyboard at the default sensitivity | 11/12 → **12/12 in chromatic order**, no slider change needed | Measured on a real photo (existing regression test) |
 
 ## Tap Strap (M0 tooling, strap not yet tested on paper)
 
