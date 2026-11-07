@@ -69,6 +69,46 @@ Install and configure ngrok using its [official documentation](https://ngrok.com
 
 Keep both the Python server and ngrok running while using the camera.
 
+## Local HTTPS (no ngrok)
+
+Phone browsers only allow camera access over HTTPS. Instead of ngrok, the server
+can serve HTTPS itself on your local network using a self-signed certificate.
+The phone and computer must be on the same Wi-Fi, and the network must let devices
+reach each other (many school and public networks block this).
+
+1. Create a certificate once, from the repo root (on macOS `openssl` is built in;
+   on Windows run it from Git Bash):
+
+   ```bash
+   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+     -keyout key.pem -out cert.pem -subj "/CN=localhost"
+   ```
+
+   `*.pem` is gitignored. Never commit `key.pem`.
+
+2. Start the server with `--https`:
+
+   ```bash
+   python phone_server.py --https
+   ```
+
+3. Find your computer's local IP address (macOS: `ipconfig getifaddr en0`;
+   Windows: `ipconfig`, look for the IPv4 address) and open
+   `https://<that-ip>:5000` on your phone.
+4. The phone warns that the certificate isn't trusted. Continue anyway
+   (Safari: **Show Details → visit this website**; Chrome: **Advanced → Proceed**),
+   then select **Start Camera**.
+
+The certificate expires after 365 days; rerun step 1 to make a new one.
+
+### macOS notes
+
+- Activate the environment with `source .venv/bin/activate` (not `Activate.ps1`),
+  or run `.venv/bin/python phone_server.py --https` directly.
+- If port 5000 is already in use, turn off **AirPlay Receiver** in
+  **System Settings → General → AirDrop & Handoff**.
+- `No module named cv2` means the system Python is running instead of the `.venv`.
+
 ## Project Structure
 
 - `phone_server.py` — Flask server, frame processing, and hand tracking.
@@ -127,5 +167,6 @@ python -m unittest discover -s tests -t .
 
 ## Notes
 
-- Phone camera access requires HTTPS; use the ngrok forwarding URL.
-- Do not commit `.venv/`, authentication tokens, or other secrets.
+- Phone camera access requires HTTPS; use the ngrok forwarding URL or `--https`
+  (see [Local HTTPS](#local-https-no-ngrok)).
+- Do not commit `.venv/`, `*.pem` certificate files, authentication tokens, or other secrets.
