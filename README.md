@@ -7,7 +7,8 @@ A computer-vision project exploring a virtual piano played on paper using a phon
 - Python 3.12
 - `pip`
 - A phone with a camera and browser
-- [ngrok](https://ngrok.com/download) for HTTPS camera access
+- Phone and computer on the same Wi-Fi (for the [local network](#option-1-local-network-no-ngrok) setup),
+  or [ngrok](https://ngrok.com/download) as an alternative
 
 ## Setup
 
@@ -45,13 +46,90 @@ Install Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
+### macOS setup
+
+The steps above are for Windows. On a Mac, install Python 3.12 with
+[Homebrew](https://brew.sh) (newer Python versions are not supported by MediaPipe),
+then create the environment from the repo root:
+
+```bash
+brew install python@3.12
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+`python -c "import sys; print(sys.executable)"` should print a path ending in
+`.venv/bin/python`. In VS Code, select the `.venv` interpreter. Activate the
+environment again (`source .venv/bin/activate`) in every new terminal.
+
 The MediaPipe Hand Landmarker model is included in `models/hand_landmarker.task`.
 
-Install and configure ngrok using its [official documentation](https://ngrok.com/docs/).
+Next, follow [Option 1: Local network](#option-1-local-network-no-ngrok) to run it.
 
 ## Running
 
-1. Start the server:
+Phone browsers only allow camera access over HTTPS, so the phone page has to be
+served over HTTPS. There are two ways to do that:
+
+- **[Local network](#option-1-local-network-no-ngrok)**: the phone opens your
+  computer's IP address directly (e.g. `https://10.19.172.29:5000`). No extra
+  software; this is the tested setup on macOS.
+- **[ngrok](#option-2-ngrok)**: a public HTTPS tunnel. Use this if your Wi-Fi
+  blocks devices from reaching each other.
+
+### Option 1: Local network (no ngrok)
+
+The server serves HTTPS itself using a self-signed certificate. The phone and
+computer must be on the **same Wi-Fi**, and the network must let devices reach
+each other (many school and public networks block this; use ngrok there).
+
+1. Create a certificate once, from the repo root (on macOS `openssl` is built in;
+   on Windows run it from Git Bash):
+
+   ```bash
+   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+     -keyout key.pem -out cert.pem -subj "/CN=localhost"
+   ```
+
+   `*.pem` is gitignored. Never commit `key.pem`.
+
+2. Start the server with `--https` (with the `.venv` activated):
+
+   ```bash
+   python phone_server.py --https
+   ```
+
+3. Find your computer's local IP address:
+   - macOS: `ipconfig getifaddr en0` (prints something like `10.19.172.29`)
+   - Windows: `ipconfig`, look for the IPv4 address
+
+4. On your phone, open `https://<that-ip>:5000`, for example
+   `https://10.19.172.29:5000`. Include `https://` and `:5000`.
+5. The phone warns that the certificate isn't trusted. That's expected, so continue
+   (Safari: **Show Details → visit this website**; Chrome: **Advanced → Proceed**).
+6. Select **Start Camera** and allow camera access.
+7. Press `Q` in the OpenCV window to stop the server.
+
+The IP address can change when you switch networks, so check it again with step 3
+if the page stops loading. The certificate expires after 365 days; rerun step 1 to
+make a new one.
+
+#### macOS troubleshooting
+
+- `No module named cv2`: the system Python is running instead of the `.venv`.
+  Run `source .venv/bin/activate` first, or use `.venv/bin/python phone_server.py --https`.
+- Port 5000 already in use: turn off **AirPlay Receiver** in
+  **System Settings → General → AirDrop & Handoff**.
+- Page won't load on the phone: check both devices are on the same Wi-Fi and the
+  IP address is current.
+
+### Option 2: ngrok
+
+Install and configure ngrok using its [official documentation](https://ngrok.com/docs/)
+(on macOS: `brew install ngrok`).
+
+1. Start the server (without `--https`):
 
    ```powershell
    python phone_server.py
@@ -68,46 +146,6 @@ Install and configure ngrok using its [official documentation](https://ngrok.com
 5. Press `Q` in the OpenCV window to stop the server.
 
 Keep both the Python server and ngrok running while using the camera.
-
-## Local HTTPS (no ngrok)
-
-Phone browsers only allow camera access over HTTPS. Instead of ngrok, the server
-can serve HTTPS itself on your local network using a self-signed certificate.
-The phone and computer must be on the same Wi-Fi, and the network must let devices
-reach each other (many school and public networks block this).
-
-1. Create a certificate once, from the repo root (on macOS `openssl` is built in;
-   on Windows run it from Git Bash):
-
-   ```bash
-   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-     -keyout key.pem -out cert.pem -subj "/CN=localhost"
-   ```
-
-   `*.pem` is gitignored. Never commit `key.pem`.
-
-2. Start the server with `--https`:
-
-   ```bash
-   python phone_server.py --https
-   ```
-
-3. Find your computer's local IP address (macOS: `ipconfig getifaddr en0`;
-   Windows: `ipconfig`, look for the IPv4 address) and open
-   `https://<that-ip>:5000` on your phone.
-4. The phone warns that the certificate isn't trusted. Continue anyway
-   (Safari: **Show Details → visit this website**; Chrome: **Advanced → Proceed**),
-   then select **Start Camera**.
-
-The certificate expires after 365 days; rerun step 1 to make a new one.
-
-### macOS notes
-
-- Activate the environment with `source .venv/bin/activate` (not `Activate.ps1`),
-  or run `.venv/bin/python phone_server.py --https` directly.
-- If port 5000 is already in use, turn off **AirPlay Receiver** in
-  **System Settings → General → AirDrop & Handoff**.
-- `No module named cv2` means the system Python is running instead of the `.venv`.
 
 ## Project Structure
 
@@ -168,5 +206,5 @@ python -m unittest discover -s tests -t .
 ## Notes
 
 - Phone camera access requires HTTPS; use the ngrok forwarding URL or `--https`
-  (see [Local HTTPS](#local-https-no-ngrok)).
+  (see [Local network](#option-1-local-network-no-ngrok)).
 - Do not commit `.venv/`, `*.pem` certificate files, authentication tokens, or other secrets.
